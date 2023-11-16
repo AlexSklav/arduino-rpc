@@ -3,7 +3,6 @@
 *.pyc
 .ropeproject
 */Arduino/*/Config.h
-setup.py
 paver-minilib.zip
 build/*
 */*_pb2.py
@@ -20,3 +19,6 @@ dist/*
 .pydevproject
 arduino_rpc/Arduino/library/*
 .idea
+
+# Mac crap
+.DS_Store

@@ -1,9 +1,9 @@
-from __future__ import absolute_import
+# coding: utf-8
 import numpy as np
 from nadamq.NadaMq import cPacketParser
 
 
-class ProxyBase(object):
+class ProxyBase:
     def _send_command(self, packet):
         self._serial.write(packet.tostring())
         parser = cPacketParser()

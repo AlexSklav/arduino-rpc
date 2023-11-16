@@ -1,8 +1,8 @@
-from __future__ import absolute_import
+# coding: utf-8
 import sys
 from path_helpers import path
 
-from ..rpc_data_frame import get_c_header_code, get_python_code
+from ..rpc_data_frame import get_c_commands_header_code, get_python_code
 from ..code_gen import write_code
 
 
@@ -29,8 +29,7 @@ def parse_args(args=None):
 
     args = parser.parse_args()
     if args.out_file.isfile() and not args.force_overwrite:
-        parser.error('Output file already exists.  Use `--force-overwrite` to '
-                     'overwrite.')
+        parser.error('Output file already exists.  Use `--force-overwrite` to overwrite.')
     return args
 
 
@@ -40,6 +39,6 @@ if __name__ == '__main__':
     if args.python:
         f_get_code = get_python_code
     else:
-        f_get_code = lambda *args_: get_c_header_code(*(args_ + (args.cpp, )))
+        f_get_code = lambda *args_: get_c_commands_header_code(*(args_ + (args.cpp, )))
 
     write_code(args.cpp_header, args.class_name, args.out_file, f_get_code)

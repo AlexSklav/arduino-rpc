@@ -1,42 +1,36 @@
-from __future__ import absolute_import
-from arduino_helpers.context import (auto_context, Board, Uploader,
-                                     ArduinoContext)
+# coding: utf-8
+from typing import Optional
+
+from arduino_helpers.context import auto_context, Board, Uploader, ArduinoContext
 from serial_device import get_serial_ports
-from . import get_firmwares
 
 
-def upload_firmware(firmware_path, board_name, port=None,
-                    arduino_install_home=None, **kwargs):
-    '''
+def upload_firmware(firmware_path: str, board_name: str, port: str = None,
+                    arduino_install_home: str = None, **kwargs) -> None:
+    """
     Upload the specified firmware file to the specified board.
-    '''
-    if arduino_install_home is None:
-        context = auto_context()
-    else:
-        context = ArduinoContext(arduino_install_home)
+    """
+    context = auto_context() if arduino_install_home is None else ArduinoContext(arduino_install_home)
     board = Board(context, board_name)
     uploader = Uploader(board)
-    available_ports = list(get_serial_ports())
+    available_ports = get_serial_ports()
     if port is None:
         # No serial port was specified.
         if len(available_ports) == 1:
-            # There is only one serial port available, so select it
-            # automatically.
+            # There is only one serial port available, so select it automatically.
             port = available_ports[0]
         else:
-            raise IOError('No serial port was specified.  Please select one of'
-                          ' the following ports: %s' % available_ports)
+            raise IOError(f'No serial port was specified. Please select one of the following ports: {available_ports}')
     uploader.upload(firmware_path, port, **kwargs)
 
 
-def upload(board_name, get_firmware, port=None, arduino_install_home=None,
-           **kwargs):
-    '''
+def upload(board_name: str, get_firmware: callable, port: str = None,
+           arduino_install_home: str = None, **kwargs) -> None:
+    """
     Upload the first firmware that matches the specified board type.
-    '''
+    """
     firmware_path = get_firmware(board_name)
-    upload_firmware(firmware_path, board_name, port, arduino_install_home,
-                    **kwargs)
+    upload_firmware(firmware_path, board_name, port, arduino_install_home, **kwargs)
 
 
 def get_arg_parser():

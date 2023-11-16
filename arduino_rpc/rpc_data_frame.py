@@ -1,17 +1,20 @@
-from __future__ import absolute_import
-from __future__ import print_function
-from collections import OrderedDict
-
+# coding: utf-8
 import jinja2
 import numpy as np
+import pandas as pd
+
+from typing import Optional, Union
+from path_helpers import path
+
 from . import get_library_directory
 from .dtypes import NP_STD_INT_TYPE, STD_ARRAY_TYPES
 
 
-def get_c_commands_header_code(df_sig_info, namespace, extra_header=None,
-                               extra_footer=None, **kwargs):
+def get_c_commands_header_code(df_sig_info: pd.DataFrame, namespace: str,
+                               extra_header: Optional[str] = None, extra_footer: Optional[str] = None,
+                               **kwargs):
     # TODO: Update doc string to reflect generating commands header
-    '''
+    """
     Generate C++ command processor header code, which decodes a command from an
     incoming array and calls the corresponding method on a wrapped object
     instance.
@@ -24,11 +27,12 @@ def get_c_commands_header_code(df_sig_info, namespace, extra_header=None,
      - `namespace`: Namespace to wrap `CommandProcessor` header in.
      - `extra_header`: Extra text to insert before the namespace (optional).
      - `extra_footer`: Extra text to insert after the namespace (optional).
-    '''
+    """
     template = jinja2.Template(r'''
 #ifndef ___{{ namespace.upper() }}__COMMANDS___
 #define ___{{ namespace.upper() }}__COMMANDS___
 
+#include <PacketParser.h>
 #include "CArrayDefs.h"
 
 {% if extra_header is not none %}
@@ -57,6 +61,7 @@ static const int CMD_{{ method_name.upper() }} = {{ '0x%02x' % method_i }};
 
 }  // namespace {{ namespace }}
 
+typedef PacketParser<FixedPacket> parser_t;
 {% if extra_footer is not none %}
 {{ extra_footer }}
 {% endif %}
@@ -68,11 +73,11 @@ static const int CMD_{{ method_name.upper() }} = {{ '0x%02x' % method_i }};
                            extra_footer=extra_footer, **kwargs)
 
 
-def get_c_command_processor_header_code(df_sig_info, namespace,
-                                        extra_header=None, extra_footer=None,
+def get_c_command_processor_header_code(df_sig_info: pd.DataFrame, namespace: str,
+                                        extra_header: Optional[str] = None, extra_footer: Optional[str] = None,
                                         **kwargs):
     # TODO: Update doc string to reflect generating command processor header
-    '''
+    """
     Generate C++ command processor header code, which decodes a command from an
     incoming array and calls the corresponding method on a wrapped object
     instance.
@@ -85,7 +90,7 @@ def get_c_command_processor_header_code(df_sig_info, namespace,
      - `namespace`: Namespace to wrap `CommandProcessor` header in.
      - `extra_header`: Extra text to insert before the namespace (optional).
      - `extra_footer`: Extra text to insert after the namespace (optional).
-    '''
+    """
     template = jinja2.Template(r'''
 #ifndef ___{{ namespace.upper() }}__COMMAND_PROCESSOR___
 #define ___{{ namespace.upper() }}__COMMAND_PROCESSOR___
@@ -194,9 +199,10 @@ public:
                            extra_footer=extra_footer, **kwargs)
 
 
-def get_python_code(df_sig_info, extra_header=None, extra_footer=None,
-                    pointer_width=16):
-    '''
+def get_python_code(df_sig_info: pd.DataFrame,
+                    extra_header: Optional[str] = None, extra_footer: Optional[str] = None,
+                    pointer_width: int = 16):
+    """
     Generate Python `Proxy` class, with one method for each corresponding
     method signature in `df_sig_info`.  Each method on the `Proxy` class:
 
@@ -212,7 +218,7 @@ def get_python_code(df_sig_info, extra_header=None, extra_footer=None,
        returned by `arduino_rpc.code_gen.get_multilevel_method_sig_frame`).
      - `extra_header`: Extra text to insert before class definition (optional).
      - `extra_footer`: Extra text to insert after class definition (optional).
-    '''
+    """
     # TODO: The size of an `*Array` struct depends on the architecture.
     #
     # Specifically, on 8-bit AVR processors, addresses are 16-bit, but on
@@ -225,12 +231,14 @@ def get_python_code(df_sig_info, extra_header=None, extra_footer=None,
     #
     # Take a pointer bit-width as an argument, `pointer_width=32`.
     template = jinja2.Template(r'''
-from builtins import bytes
-import types
 import pandas as pd
 import numpy as np
 from nadamq.NadaMq import cPacket, PACKET_TYPES
+{%- if extra_header is not none %}
+{% if 'ProxyBase' not in extra_header -%}
 from arduino_rpc.proxy import ProxyBase
+{% endif -%}{%- endif %}
+
 try:
     from google.protobuf.message import Message
     _translate = (lambda arg: arg.SerializeToString()
@@ -238,20 +246,19 @@ try:
 except ImportError:
     _translate = lambda arg: arg
 
-
-{% if extra_header is not none %}
+{% if extra_header is not none -%}
 {{ extra_header }}
-{% endif %}
+{%- endif %}
 
 
 class Proxy(ProxyBase):
-
-{% for i, (method_i, method_name) in df_sig_info.drop_duplicates(subset='method_i')[['method_i', 'method_name']].iterrows() %}
+{%- for i, (method_i, method_name) in 
+        df_sig_info.drop_duplicates(subset='method_i')[['method_i', 'method_name']].iterrows() %}
     _CMD_{{ method_name.upper() }} = {{ '0x%02x' % method_i }}
 {%- endfor %}
     MAX_COMMAND_CODE = {{ df_sig_info.method_i.max() }}
-
-{% for (method_i, method_name, camel_name, arg_count), df_method_i in df_sig_info.groupby(['method_i', 'method_name', 'camel_name', 'arg_count']) %}
+{% for (method_i, method_name, camel_name, arg_count), df_method_i in 
+        df_sig_info.groupby(['method_i', 'method_name', 'camel_name', 'arg_count']) %}
     def {{ method_name }}(self{% if arg_count > 0 %}, {{ ', '.join(df_method_i.arg_name) }}{% endif %}):
         command = np.dtype('uint16').type(self._CMD_{{ method_name.upper() }})
 {%- if arg_count > 0 %}
@@ -276,11 +283,11 @@ class Proxy(ProxyBase):
         array_info['start'] = array_info.length.cumsum() - array_info.length
         array_data = b''.join([
 {%- for arg_name in df_method_i.loc[df_method_i.ndims > 0, 'arg_name'] -%}
-        {{ arg_name }}.tostring(), {% endfor -%}])
+        {{ arg_name }}.tobytes(), {% endfor -%}])
 {%- else %}
         array_data = b''
 {%- endif %}
-        payload_size = ARG_STRUCT_SIZE + len(array_data)
+        # payload_size = ARG_STRUCT_SIZE + len(array_data)
         struct_data = np.array([(
 {%- for i, (arg_name, ndims, np_atom_type) in df_method_i[['arg_name', 'ndims', 'atom_np_type']].iterrows() -%}
 {%- if ndims > 0 -%}
@@ -294,59 +301,62 @@ class Proxy(ProxyBase):
 {%- if ndims > 0 -%}
         ('{{ arg_name }}_length', 'uint32'), ('{{ arg_name }}_data', 'uint{{ pointer_width }}'), {% else -%}
         ('{{ arg_name }}', '{{ np_atom_type }}'), {% endif %}{% endfor %}])
-        payload_data = struct_data.tostring() + array_data
+        payload_data = struct_data.tobytes() + array_data
 {%- else %}
-        payload_size = 0
+        # payload_size = 0
         payload_data = b''
 {%- endif %}
 
-        payload_data = command.tostring() + payload_data
+        payload_data = command.tobytes() + payload_data
         packet = cPacket(data=payload_data, type_=PACKET_TYPES.DATA)
         response = self._send_command(packet)
 {% if df_method_i.return_atom_type.iloc[0] is not none %}
-        result = np.fromstring(response.data(), dtype='{{ df_method_i.return_atom_np_type.iloc[0] }}')
+        result = np.frombuffer(response.data(), dtype='{{ df_method_i.return_atom_np_type.iloc[0] }}')
 {% if df_method_i.return_ndims.iloc[0] > 0 %}
         # Return type is an array, so return entire array.
         return result
 {% else %}
-        # Return type is a scalar, so return first entry in array.
+        # Return type is a scalar, so return first entry of array.
         return result[0]
-{% endif %}{% endif %}
-{% endfor %}
+{% endif -%}{%- else %}
+        return response  
+{% endif -%}
+{%- endfor %}
 
-
-{% if extra_footer is not none %}
+{% if extra_footer is not none -%}
 {{ extra_footer }}
-{% endif %}
+{%- endif %}
 '''.strip())
-    return template.render(df_sig_info=df_sig_info, extra_header=extra_header,
-                           extra_footer=extra_footer,
-                           pointer_width=pointer_width)
+    df_sig_info_ = df_sig_info.copy()
+    # Avoid shadowing builtins
+    builtin_names = ['str', 'list', 'dict', 'set', 'len', 'sum', 'max',
+                     'min', 'open', 'input', 'id', 'format', 'range', 'type']
+    df_sig_info_.arg_name = df_sig_info_.arg_name.replace({name: name + '_' for name in builtin_names})
+    return template.render(df_sig_info=df_sig_info_, extra_header=extra_header,
+                           extra_footer=extra_footer, pointer_width=pointer_width,
+                           )
 
 
-def get_struct_sig_info_frame(df_sig_info, pointer_width=16):
+def get_struct_sig_info_frame(df_sig_info: pd.DataFrame, pointer_width: int = 16) -> pd.DataFrame:
     df_sig_info = df_sig_info.copy()
+
     df_sig_info['struct_atom_type'] = df_sig_info.atom_type
     df_sig_info.loc[df_sig_info.ndims > 0, 'struct_atom_type'] = \
-        STD_ARRAY_TYPES[df_sig_info.loc[df_sig_info.ndims > 0,
-                                        'atom_type']].values
-    df_sig_info['struct_size'] = 0
+        df_sig_info.loc[df_sig_info.ndims > 0, 'atom_type'].map(STD_ARRAY_TYPES)
 
-    df_sig_info.insert(4, 'return_atom_np_type', None)
-    df_sig_info = df_sig_info[~df_sig_info.return_atom_type
-                              .isin([np.NaN])].copy()
+    df_sig_info = df_sig_info[~df_sig_info.return_atom_type.isin([np.NaN])].copy()  # This may get rid of some methods
+
+    df_sig_info['return_atom_np_type'] = None
     none_mask = (~df_sig_info.return_atom_type.isin([None]))
     df_sig_info.loc[none_mask, 'return_atom_np_type'] = \
-        NP_STD_INT_TYPE[df_sig_info.loc[none_mask, 'return_atom_type']].values
-    df_sig_info.insert(5, 'return_struct_atom_type',
-                       df_sig_info['return_atom_type'])
+        df_sig_info.loc[none_mask, 'return_atom_type'].map(NP_STD_INT_TYPE)
+
+    df_sig_info['return_struct_atom_type'] = df_sig_info['return_atom_type']
     df_sig_info.loc[df_sig_info.return_ndims > 0, 'return_struct_atom_type'] = \
-        STD_ARRAY_TYPES[df_sig_info.loc[df_sig_info.return_ndims > 0,
-                                        'return_atom_type']].values
+        df_sig_info.loc[df_sig_info.return_ndims > 0, 'return_atom_type'].map(STD_ARRAY_TYPES)
 
     df_sig_info.loc[df_sig_info.arg_count > 0, 'atom_np_type'] = \
-        NP_STD_INT_TYPE[df_sig_info.loc[df_sig_info.arg_count > 0,
-                                        'atom_type']].values
+        df_sig_info.loc[df_sig_info.arg_count > 0, 'atom_type'].map(NP_STD_INT_TYPE)
 
     # __N.B.,__ The size of an `*Array` struct depends on the architecture.
     #
@@ -358,48 +368,47 @@ def get_struct_sig_info_frame(df_sig_info, pointer_width=16):
     #
     # We handle this by taking a pointer bit-width as an argument,
     # default `pointer_width=16`.
-    df_sig_info.loc[df_sig_info.arg_count > 0, 'struct_size'] = \
-        (df_sig_info.loc[df_sig_info.arg_count > 0,
-                         'struct_atom_type']
-         .map(lambda v:
-              np.dtype('uint32').itemsize +  # *Array.length
-              np.dtype('uint' + str(pointer_width)).itemsize  # *Array.data
-              if v.endswith('Array')
-              else np.dtype(NP_STD_INT_TYPE[v]).itemsize).values)
-    return df_sig_info
+    df_sig_info['struct_size'] = 0
+    if (df_sig_info.arg_count > 0).any():
+        df_sig_info.loc[df_sig_info.arg_count > 0, 'struct_size'] = \
+            (df_sig_info.loc[df_sig_info.arg_count > 0, 'struct_atom_type']
+             .map(lambda v: np.dtype('uint32').itemsize +  # *Array.length
+                            np.dtype(f'uint{pointer_width}').itemsize  # *Array.data
+            if v.endswith('Array') else np.dtype(NP_STD_INT_TYPE[v]).itemsize))  # assuming that nan entries are arrays
+
+    return df_sig_info.replace(np.nan, None)
 
 
-def generate_rpc_buffer_header(output_dir, **kwargs):
-    '''
+def generate_rpc_buffer_header(output_dir: Union[str, path], **kwargs) -> None:
+    """
     .. versionchanged:: 1.11
         Add support for Python 3.  Specifically, use
         :meth:`path_helpers.path.text` method instead of
         :meth:`path_helpers.path.bytes` and open output file for writing in
         text mode.
-    '''
+    """
     import warnings
 
-    source_dir = kwargs.pop('source_dir', get_library_directory())
+    source_dir = path(kwargs.pop('source_dir', get_library_directory()))
     template_filename = kwargs.get('template_filename', 'RPCBuffer.ht')
 
-    default_settings = OrderedDict([('PACKET_SIZE', 80),
-                                    ('I2C_PACKET_SIZE', 'PACKET_SIZE')])
-    board_settings = OrderedDict([
-        ('uno', {'code': '__AVR_ATmega328P__', 'settings': default_settings}),
-        ('mega2560', {'code': '__AVR_ATmega2560__',
-                      'settings': OrderedDict(default_settings,
-                                              PACKET_SIZE=256)}),
-        ('default', {'settings': default_settings})])
+    default_settings = {'PACKET_SIZE': 80,
+                        'I2C_PACKET_SIZE': 'PACKET_SIZE'}
+    board_settings = {
+        'uno': {'code': '__AVR_ATmega328P__', 'settings': default_settings},
+        'mega2560': {'code': '__AVR_ATmega2560__', 'settings': dict(default_settings, PACKET_SIZE=256)},
+        'default': {'settings': default_settings}
+    }
 
     kwargs.update({'board_settings': board_settings})
 
     template_file = source_dir.joinpath(template_filename)
     output_file = output_dir.joinpath(template_file.namebase + '.h')
-    if output_file.isfile():
-        warnings.warn('Skipping generation of buffer configuration since file '
-                      'already exists: `%s`' % output_file)
-    else:
+
+    if not kwargs.get('override', False):
         with output_file.open('w') as output:
             t = jinja2.Template(template_file.text())
             output.write(t.render(**kwargs))
-            print(('Wrote buffer configuration: `%s`' % output_file))
+            print(f"Generated '{output_file.name}' > {output_file}")
+    elif output_file.isfile():
+        warnings.warn(f'Skipping generation of buffer configuration since file already exists: `{output_file}`')
