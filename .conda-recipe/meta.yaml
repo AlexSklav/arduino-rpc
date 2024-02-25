@@ -12,7 +12,7 @@ package:
 
 requirements:
   build:
-    - python >=3.8
+    - python >=3.6
     - jinja2
     - nadamq
     - pandas
@@ -54,7 +54,7 @@ outputs:
       - {{ SP_DIR }}/{{ MODULE_NAME }}
     requirements:
       run:
-        - python >=3.8
+        - python >=3.6
         - {{ pin_compatible(PKG_NAME + '-dev', max_pin='x.x') }}
         - jinja2
         - nadamq
