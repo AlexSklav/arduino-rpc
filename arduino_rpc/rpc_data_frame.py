@@ -287,7 +287,7 @@ class Proxy(ProxyBase):
 {%- else %}
         array_data = b''
 {%- endif %}
-        # payload_size = ARG_STRUCT_SIZE + len(array_data)
+        payload_size = ARG_STRUCT_SIZE + len(array_data)
         struct_data = np.array([(
 {%- for i, (arg_name, ndims, np_atom_type) in df_method_i[['arg_name', 'ndims', 'atom_np_type']].iterrows() -%}
 {%- if ndims > 0 -%}
@@ -303,7 +303,7 @@ class Proxy(ProxyBase):
         ('{{ arg_name }}', '{{ np_atom_type }}'), {% endif %}{% endfor %}])
         payload_data = struct_data.tobytes() + array_data
 {%- else %}
-        # payload_size = 0
+        payload_size = 0
         payload_data = b''
 {%- endif %}
 
