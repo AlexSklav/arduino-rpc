@@ -143,11 +143,11 @@ def get_field_value(root, field_descriptor, full_name: str, set_default: Optiona
 
     for level in level_fields[:-1]:
         if not set_default and not parent.HasField(level):
-            return np.NaN
+            return np.nan
         parent = getattr(parent, level)
     level = level_fields[-1]
     if not set_default and not parent.HasField(level):
-        return np.NaN
+        return np.nan
     value = getattr(parent, level)
 
     if field_descriptor.enum_type:

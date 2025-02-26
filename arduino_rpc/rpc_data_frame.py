@@ -344,7 +344,7 @@ def get_struct_sig_info_frame(df_sig_info: pd.DataFrame, pointer_width: int = 16
     df_sig_info.loc[df_sig_info.ndims > 0, 'struct_atom_type'] = \
         df_sig_info.loc[df_sig_info.ndims > 0, 'atom_type'].map(STD_ARRAY_TYPES)
 
-    df_sig_info = df_sig_info[~df_sig_info.return_atom_type.isin([np.NaN])].copy()  # This may get rid of some methods
+    df_sig_info = df_sig_info[~df_sig_info.return_atom_type.isin([np.nan])].copy()  # This may get rid of some methods
 
     df_sig_info['return_atom_np_type'] = None
     none_mask = (~df_sig_info.return_atom_type.isin([None]))
