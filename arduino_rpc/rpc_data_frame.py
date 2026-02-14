@@ -49,7 +49,7 @@ typedef struct __attribute__((packed)) {
 } {{ camel_name }}Request;
 
 typedef struct __attribute__((packed)) {
-{%- if df_method_i.return_atom_type.iloc[0] is not none %}
+{%- if df_method_i.return_atom_type.iloc[0] is not none and df_method_i.return_atom_type.iloc[0] != 'void' %}
   {{ df_method_i.return_struct_atom_type.iloc[0] }} result;
 {%- endif %}
 } {{ camel_name }}Response;
@@ -148,12 +148,12 @@ public:
     {%- endfor %}
     {%- endif -%}
 
-    {%- if df_method_i.return_atom_type.iloc[0] is not none %}
+    {%- if df_method_i.return_atom_type.iloc[0] is not none and df_method_i.return_atom_type.iloc[0] != 'void' %}
             {{ camel_name }}Response response;
 
             response.result = {%- endif %}
             obj_.{{ method_name }}({% if arg_count > 0 %}{{ ', '.join('request.' + df_method_i.arg_name) }}{% endif %});
-    {% if df_method_i.return_atom_type.iloc[0] is not none %}
+    {% if df_method_i.return_atom_type.iloc[0] is not none and df_method_i.return_atom_type.iloc[0] != 'void' %}
             /* Copy result to output buffer. */
     {%- if df_method_i.return_ndims.iloc[0] > 0 %}
             /* Result type is an array, so need to do `memcpy` for array data. */
@@ -310,7 +310,7 @@ class Proxy(ProxyBase):
         payload_data = command.tobytes() + payload_data
         packet = cPacket(data=payload_data, type_=PACKET_TYPES.DATA)
         response = self._send_command(packet)
-{% if df_method_i.return_atom_type.iloc[0] is not none %}
+{% if df_method_i.return_atom_type.iloc[0] is not none and df_method_i.return_atom_type.iloc[0] != 'void' %}
         result = np.frombuffer(response.data(), dtype='{{ df_method_i.return_atom_np_type.iloc[0] }}')
 {% if df_method_i.return_ndims.iloc[0] > 0 %}
         # Return type is an array, so return entire array.
@@ -347,7 +347,7 @@ def get_struct_sig_info_frame(df_sig_info: pd.DataFrame, pointer_width: int = 16
     df_sig_info = df_sig_info[~df_sig_info.return_atom_type.isin([np.nan])].copy()  # This may get rid of some methods
 
     df_sig_info['return_atom_np_type'] = None
-    none_mask = (~df_sig_info.return_atom_type.isin([None]))
+    none_mask = (~df_sig_info.return_atom_type.isin([None, 'void']))
     df_sig_info.loc[none_mask, 'return_atom_np_type'] = \
         df_sig_info.loc[none_mask, 'return_atom_type'].map(NP_STD_INT_TYPE)
 

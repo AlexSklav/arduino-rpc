@@ -28,7 +28,7 @@ requirements:
     - nadamq
     - pandas
     - numpy
-    - protobuf
+    - protobuf 5.29.*
     - serial-device
     - platformio
     - dropbot-headers
@@ -60,7 +60,7 @@ outputs:
         - nadamq
         - pandas
         - numpy
-        - protobuf
+        - protobuf 5.29.*
         - serial-device
         - platformio
         - path-helpers
