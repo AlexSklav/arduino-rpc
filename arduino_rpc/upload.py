@@ -1,5 +1,5 @@
 # coding: utf-8
-from typing import Optional
+from typing import Callable, Optional
 
 from arduino_helpers.context import auto_context, Board, Uploader, ArduinoContext
 from serial_device import get_serial_ports
@@ -24,7 +24,7 @@ def upload_firmware(firmware_path: str, board_name: str, port: str = None,
     uploader.upload(firmware_path, port, **kwargs)
 
 
-def upload(board_name: str, get_firmware: callable, port: str = None,
+def upload(board_name: str, get_firmware: Callable, port: str = None,
            arduino_install_home: str = None, **kwargs) -> None:
     """
     Upload the first firmware that matches the specified board type.

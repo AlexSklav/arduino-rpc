@@ -1,6 +1,6 @@
 # coding: utf-8
 import sys
-from typing import Union
+from typing import Callable, Union
 
 from clang_helpers import open_cpp_source, extract_class_declarations
 from clang_helpers.data_frame import get_clang_methods_frame
@@ -105,7 +105,7 @@ def get_multilevel_method_sig_frame(cpp_header: Union[str, list],
 
 
 def write_code(cpp_header: list, class_name: list, out_file: Union[str, path],
-               f_get_code: callable, *args, **kwargs) -> None:
+               f_get_code: Callable, *args, **kwargs) -> None:
     """
     Provided a list of C++ header files and a list of class names to discover
     in the corresponding files, write the result of the provided `f_get_code`

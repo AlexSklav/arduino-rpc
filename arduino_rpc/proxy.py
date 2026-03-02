@@ -5,15 +5,15 @@ from nadamq.NadaMq import cPacketParser
 
 class ProxyBase:
     def _send_command(self, packet):
-        self._serial.write(packet.tostring())
+        self._serial.write(packet.tobytes())
         parser = cPacketParser()
         result = None
 
         while True:
-            response = self._serial.read(self._serial.inWaiting())
-            if response == '':
+            response = self._serial.read(self._serial.in_waiting)
+            if not response:
                 continue
-            result = parser.parse(np.fromstring(response, dtype='uint8'))
+            result = parser.parse(np.frombuffer(response, dtype='uint8'))
             if parser.message_completed:
                 break
             elif parser.error:
