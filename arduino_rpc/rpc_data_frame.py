@@ -234,10 +234,13 @@ def get_python_code(df_sig_info: pd.DataFrame,
 import pandas as pd
 import numpy as np
 from nadamq.NadaMq import cPacket, PACKET_TYPES
-{%- if extra_header is not none %}
-{% if 'ProxyBase' not in extra_header -%}
+{#- `extra_header` may supply its own `ProxyBase` (e.g., a device-specific
+   subclass).  Otherwise -- including when no `extra_header` is given at all --
+   fall back to the base implementation so that `Proxy(ProxyBase)` below always
+   has `ProxyBase` in scope. #}
+{% if extra_header is none or 'ProxyBase' not in extra_header -%}
 from arduino_rpc.proxy import ProxyBase
-{% endif -%}{%- endif %}
+{% endif %}
 
 try:
     from google.protobuf.message import Message
@@ -267,7 +270,7 @@ class Proxy(ProxyBase):
 {% for i, array_i in df_method_i[df_method_i.ndims > 0].iterrows() %}
         {{ array_i['arg_name'] }} = _translate({{ array_i['arg_name'] }})
         if isinstance({{ array_i['arg_name'] }}, str):
-            {{ array_i['arg_name'] }} = map(ord, {{ array_i['arg_name'] }})
+            {{ array_i['arg_name'] }} = list({{ array_i['arg_name'] }}.encode('utf-8'))
         elif isinstance({{ array_i['arg_name'] }}, bytes):
             {{ array_i['arg_name'] }} = list(bytes({{ array_i['arg_name'] }}))
         # Argument is an array, so cast to appropriate array type.
@@ -275,12 +278,16 @@ class Proxy(ProxyBase):
 {%- endfor %}
         array_info = pd.DataFrame([
 {%- for arg_name in df_method_i.loc[df_method_i.ndims > 0, 'arg_name'] -%}
-        {{ arg_name }}.shape[0], {% endfor -%}],
+        ({{ arg_name }}.shape[0], {{ arg_name }}.nbytes), {% endfor -%}],
                                   index=[
 {%- for arg_name in df_method_i.loc[df_method_i.ndims > 0, 'arg_name'] -%}
         '{{ arg_name }}', {% endfor -%}],
-                                  columns=['length'])
-        array_info['start'] = array_info.length.cumsum() - array_info.length
+                                  columns=['length', 'nbytes'])
+        # **N.B.,** the `*_data` struct member is consumed by the firmware as a
+        # *byte* offset relative to the start of the request structure, so
+        # offsets must accumulate array sizes in bytes (i.e., `nbytes`) rather
+        # than in elements (`length`).
+        array_info['start'] = array_info.nbytes.cumsum() - array_info.nbytes
         array_data = b''.join([
 {%- for arg_name in df_method_i.loc[df_method_i.ndims > 0, 'arg_name'] -%}
         {{ arg_name }}.tobytes(), {% endfor -%}])
@@ -381,6 +388,25 @@ def get_struct_sig_info_frame(df_sig_info: pd.DataFrame, pointer_width: int = 16
 
 def generate_rpc_buffer_header(output_dir: Union[str, path], **kwargs) -> None:
     """
+    Render the RPC buffer configuration header into `output_dir`.
+
+    The generated header is copied into the firmware build directory on every
+    build, so it is (re)generated unconditionally.
+
+    Parameters
+    ----------
+    output_dir : str or path
+        Directory to write the rendered header to.
+    override : bool, optional
+        **Deprecated / no-op with respect to whether the file is written.**
+
+        Previously this flag was inverted: the default (`override=False`)
+        *overwrote* an existing file, while `override=True` wrote *nothing*
+        at all (and silently did nothing when the file did not exist).  The
+        header must be regenerated on every build, so the write is now
+        unconditional and this flag only controls whether a warning is
+        emitted when an existing file is replaced.
+
     .. versionchanged:: 1.11
         Add support for Python 3.  Specifically, use
         :meth:`path_helpers.path.text` method instead of
@@ -389,6 +415,8 @@ def generate_rpc_buffer_header(output_dir: Union[str, path], **kwargs) -> None:
     """
     import warnings
 
+    # Accept plain `str` output directories.
+    output_dir = path(output_dir)
     source_dir = path(kwargs.pop('source_dir', get_library_directory()))
     template_filename = kwargs.get('template_filename', 'RPCBuffer.ht')
 
@@ -405,10 +433,15 @@ def generate_rpc_buffer_header(output_dir: Union[str, path], **kwargs) -> None:
     template_file = source_dir.joinpath(template_filename)
     output_file = output_dir.joinpath(template_file.namebase + '.h')
 
-    if not kwargs.get('override', False):
-        with output_file.open('w') as output:
-            t = jinja2.Template(template_file.text())
-            output.write(t.render(**kwargs))
-            print(f"Generated '{output_file.name}' > {output_file}")
-    elif output_file.isfile():
-        warnings.warn(f'Skipping generation of buffer configuration since file already exists: `{output_file}`')
+    # **N.B.,** the header is always written (see docstring): the in-tree
+    # callers regenerate it on every build and then copy it into the firmware
+    # build directory, so skipping an existing file would leave stale buffer
+    # settings behind.  `override` only selects whether replacing an existing
+    # file is reported.
+    if output_file.isfile() and not kwargs.get('override', False):
+        warnings.warn(f'Overwriting existing buffer configuration: `{output_file}`')
+
+    with output_file.open('w') as output:
+        t = jinja2.Template(template_file.text())
+        output.write(t.render(**kwargs))
+        print(f"Generated '{output_file.name}' > {output_file}")
