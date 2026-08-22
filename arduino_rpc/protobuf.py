@@ -20,7 +20,12 @@ TYPE_CALLABLE_MAP = {
     FieldDescriptor.TYPE_SFIXED32: 'int32_t',
     FieldDescriptor.TYPE_SFIXED64: 'int64_t',
     FieldDescriptor.TYPE_BOOL: 'bool',
-    FieldDescriptor.TYPE_ENUM: 'int32_t'
+    FieldDescriptor.TYPE_ENUM: 'int32_t',
+    # **N.B.,** `nanopb` maps `string`/`bytes` fields to character/byte
+    # buffers.  Without these entries, a validator (or any other lookup) on a
+    # `string`/`bytes` field raised `KeyError` on the raw descriptor type id.
+    FieldDescriptor.TYPE_STRING: 'char *',
+    FieldDescriptor.TYPE_BYTES: 'uint8_t *',
 }
 
 PYTYPE_MAP = {
@@ -39,6 +44,7 @@ PYTYPE_MAP = {
     FieldDescriptor.TYPE_BOOL: bool,
     FieldDescriptor.TYPE_ENUM: int,
     FieldDescriptor.TYPE_STRING: str,
+    FieldDescriptor.TYPE_BYTES: bytes,
 }
 
 
@@ -113,8 +119,14 @@ def extract_callback_data(df_protobuf: pd.DataFrame, method_name: str) -> Tuple[
       - `atom_type`: Standard C-type corresponding to field data type.
       - `name`: Name of field in Protocol Buffer message.
     """
-    match = re.match(rf"on_{df_protobuf.iloc[0].root_name.lower()}_(?P<fields>.+)_(?P<signal>[^_]+)",
-                     method_name).groupdict()
+    root_name = df_protobuf.iloc[0].root_name.lower()
+    pattern = rf"on_{root_name}_(?P<fields>.+)_(?P<signal>[^_]+)"
+    match_ = re.match(pattern, method_name)
+    if match_ is None:
+        raise ValueError(f'Handler name `{method_name}` does not match the expected form '
+                         f"`on_{root_name}_<field1 name>[__<field2 name>]_<signal>` "
+                         f'(pattern: `{pattern}`).')
+    match = match_.groupdict()
     fields = match['fields'].split('__')
     parents = [''] + fields[:-1]
     field = fields[-1]

@@ -39,9 +39,14 @@ def verify_library_directory(lib_options: Dict) -> path:
 
 def recursive_overwrite(src: path, dest: path, ignore: Optional[List] = None) -> None:
     """
-    Copy a directory recursively
+    Copy a directory recursively.
+
+    **N.B.,** `ignore` must be passed as a keyword argument.  The first
+    positional parameter of `path.walkfiles()` is `pattern`, i.e., an
+    *include* filter -- passing the ignore list positionally copied only the
+    files that were meant to be excluded.
     """
-    for file in src.walkfiles(ignore):
+    for file in src.walkfiles(ignore=ignore):
         dest_ = dest.joinpath(file.relpathto(src))
         dest_.parent.makedirs(exist_ok=True)
         file.copy2(dest_)

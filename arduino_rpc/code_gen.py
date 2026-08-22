@@ -63,22 +63,14 @@ def get_multilevel_method_sig_frame(cpp_header: Union[str, list],
         try:
             root = open_cpp_source(str(header), *args, **kwargs)
         except Exception as e:
-            print(f'[Warning] Failed to  read {header}')
-            # print(e)
-            # from IPython import embed
-            # embed()
-            # raise e
+            # **N.B.,** Do *not* continue past a failed parse.  Previously the
+            # exception was only logged, which either raised `NameError` (first
+            # header) or -- far worse -- silently generated RPC code from the
+            # *previous* header's AST, yielding wrong command codes with no
+            # indication of failure.
+            raise RuntimeError(f'Failed to parse C++ header: {header}') from e
         class_declarations = extract_class_declarations(root)
         node_class = class_declarations[class_]
-        from pprint import pprint
-        # for key, value in class_declarations.items():
-        #     if key != class_:
-        #         from clang.cindex import CursorKind
-        #         print([m.displayname for m in value.get_children() if m.kind == CursorKind.CXX_METHOD])
-
-        # ret = get_clang_methods_frame(value, std_types=True)
-        # if ret is not None:
-        #     pprint(ret.method_name.values)
         df_sig_info = get_clang_methods_frame(node_class, std_types=True)
         frame = get_struct_sig_info_frame(df_sig_info, pointer_width=pointer_width)
         frame['header_name'] = path(header).name
@@ -99,8 +91,27 @@ def get_multilevel_method_sig_frame(cpp_header: Union[str, list],
         df_unique_methods = pd.concat(frames, ignore_index=True)
 
     class_i = df_unique_methods.class_name.unique()
-    # **N.B.,** Allocate 256 command slots for each class.
-    df_unique_methods.method_i += 0xFF * df_unique_methods.class_name.map(lambda x: (x == class_i).argmax())
+    # **N.B.,** Allocate `LAYER_STRIDE` command slots for each class, i.e.,
+    # class layer bases are `0x00`, `0xFF`, `0x1FE`, `0x2FD`, ...
+    #
+    # This stride matches the command codes of deployed firmware and must not
+    # be changed.
+    LAYER_STRIDE = 0xFF
+
+    # A layer with `LAYER_STRIDE` or more methods would push its highest
+    # command codes into the range allocated to the *next* class layer.
+    layer_max_method_i = df_unique_methods.groupby('class_name').method_i.max()
+    overflowed = layer_max_method_i[layer_max_method_i >= LAYER_STRIDE]
+    if len(overflowed):
+        details = ', '.join(f'`{name}` (highest method index {int(max_i)})'
+                            for name, max_i in overflowed.items())
+        raise RuntimeError(
+            f'Command code overflow: only {LAYER_STRIDE} command slots are '
+            f'allocated per class layer, but the following class layer(s) '
+            f'exceed that limit: {details}.  Their command codes would '
+            f'collide with the next class layer.')
+
+    df_unique_methods.method_i += LAYER_STRIDE * df_unique_methods.class_name.map(lambda x: (x == class_i).argmax())
     return df_unique_methods
 
 

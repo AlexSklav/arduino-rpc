@@ -50,9 +50,10 @@ def parse_args(args=None):
     import sys
 
     if args is None:
-        args = sys.argv
+        args = sys.argv[1:]
 
     parser = get_arg_parser()
 
-    args = parser.parse_args()
-    return args
+    # **N.B.,** the caller-supplied arguments must be forwarded; previously
+    # they were ignored and `sys.argv` was always parsed instead.
+    return parser.parse_args(args)
